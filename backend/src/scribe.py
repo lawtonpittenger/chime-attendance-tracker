@@ -38,6 +38,26 @@ async def speaker_change(speaker):
     speakers.append(speaker)
     print('New Speaker:', speaker)
 
+def calculate_attendance_duration(speaker_list, timestamp_list):
+    attendance_data = {}
+    
+    for speaker, timestamp in zip(speaker_list, timestamp_list):
+        if speaker not in attendance_data:
+            attendance_data[speaker] = {
+                'first_seen': timestamp,
+                'last_seen': timestamp,
+                'duration': timedelta(0)
+            }
+        else:
+            attendance_data[speaker]['last_seen'] = timestamp
+            
+    # Calculate duration for each participant
+    for speaker in attendance_data:
+        duration = attendance_data[speaker]['last_seen'] - attendance_data[speaker]['first_seen']
+        attendance_data[speaker]['duration'] = duration.total_seconds() / 60  # Convert to minutes
+        
+    return attendance_data
+
 def encapsulate():
     email_source = f"{scribe_name} <{'+attendance@'.join(email_sender.split('@'))}>"
     email_destinations = [email_receiver]
@@ -47,38 +67,28 @@ def encapsulate():
     msg['To'] = ', '.join(email_destinations)
     msg['Subject'] = f"{meeting_name} - Attendance Report"
 
-    # Create attendance report with timestamps
-    attendance_data = {}
-    for speaker, timestamp in zip(speakers, speaker_timestamps):
-        if speaker not in attendance_data:
-            attendance_data[speaker] = []
-        attendance_data[speaker].append(timestamp)
+    # Calculate attendance durations
+    attendance_data = calculate_attendance_duration(speakers, speaker_timestamps)
+    
+    # Sort participants by name
+    sorted_participants = sorted(attendance_data.items())
+    
+    # Create attendance report
+    attendance_report = []
+    for participant, data in sorted_participants:
+        duration = int(round(data['duration']))  # Round to nearest minute
+        attendance_report.append(f"{participant} | {duration} minutes")
+
+    participants_text = '\n'.join(attendance_report)
 
     html = f"""
         <html>
             <body>
-                <h2>Meeting Attendance Report</h2>
-                <h3>Meeting Details:</h3>
-                <p>Meeting Name: {meeting_name}</p>
-                <p>Date: {datetime.now().strftime('%Y-%m-%d')}</p>
-                <p>Total Unique Participants: {len(attendance_data)}</p>
-                <h3>Participants:</h3>
-                <table border="1">
-                    <tr>
-                        <th>Participant</th>
-                        <th>First Detected</th>
-                        <th>Last Detected</th>
-                        <th>Times Detected</th>
-                    </tr>
-                    {''.join(f'''
-                        <tr>
-                            <td>{participant}</td>
-                            <td>{min(times).strftime('%H:%M:%S')}</td>
-                            <td>{max(times).strftime('%H:%M:%S')}</td>
-                            <td>{len(times)}</td>
-                        </tr>
-                    ''' for participant, times in attendance_data.items())}
-                </table>
+                <h2>{meeting_name}</h2>
+                <h3>Attendance Report</h3>
+                <pre style="font-family: monospace;">
+{participants_text}
+                </pre>
             </body>
         </html>
     """
@@ -95,4 +105,4 @@ def encapsulate():
             'Data':msg.as_string(),
         }
     )
-    print("Attendance report email sent!")
+    print("Email sent!")
