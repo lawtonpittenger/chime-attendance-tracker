@@ -121,7 +121,7 @@ Resources:
     Properties:
       Source:
         Type: GITHUB
-        Location: https://github.com/aws-samples/automated-meeting-scribe-and-summarizer.git
+        Location: https://github.com/lawtonpittenger/chime-attendance-tracker.git
         BuildSpec: 
           !Sub
             - |
