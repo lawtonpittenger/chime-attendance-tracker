@@ -115,6 +115,15 @@ Resources:
                   - "s3:PutObjectAcl"
                 Resource:
                   - !Sub arn:aws:s3:::${WebsiteBucket}/*
+        - PolicyName: 'CodeBuildAccess'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - "codeconnections:*"
+                Resource:
+                  - '*'
 
   BuildProject:
     Type: AWS::CodeBuild::Project
