@@ -38,26 +38,6 @@ async def speaker_change(speaker):
     speakers.append(speaker)
     print('New Speaker:', speaker)
 
-def calculate_attendance_duration(speaker_list, timestamp_list):
-    attendance_data = {}
-    
-    for speaker, timestamp in zip(speaker_list, timestamp_list):
-        if speaker not in attendance_data:
-            attendance_data[speaker] = {
-                'first_seen': timestamp,
-                'last_seen': timestamp,
-                'duration': timedelta(0)
-            }
-        else:
-            attendance_data[speaker]['last_seen'] = timestamp
-            
-    # Calculate duration for each participant
-    for speaker in attendance_data:
-        duration = attendance_data[speaker]['last_seen'] - attendance_data[speaker]['first_seen']
-        attendance_data[speaker]['duration'] = duration.total_seconds() / 60  # Convert to minutes
-        
-    return attendance_data
-
 def encapsulate():
     email_source = f"{scribe_name} <{'+attendance@'.join(email_sender.split('@'))}>"
     email_destinations = [email_receiver]
@@ -67,27 +47,29 @@ def encapsulate():
     msg['To'] = ', '.join(email_destinations)
     msg['Subject'] = f"{meeting_name} - Attendance Report"
 
-    # Calculate attendance durations
-    attendance_data = calculate_attendance_duration(speakers, speaker_timestamps)
-    
-    # Sort participants by name
-    sorted_participants = sorted(attendance_data.items())
-    
-    # Create attendance report
-    attendance_report = []
-    for participant, data in sorted_participants:
-        duration = int(round(data['duration']))  # Round to nearest minute
-        attendance_report.append(f"{participant} | {duration} minutes")
+    # Calculate attendance durations for each unique participant
+    attendance_data = {}
+    for speaker, timestamp in zip(speakers, speaker_timestamps):
+        if speaker not in attendance_data:
+            attendance_data[speaker] = {
+                'first_seen': timestamp,
+                'last_seen': timestamp
+            }
+        else:
+            attendance_data[speaker]['last_seen'] = timestamp
 
-    participants_text = '\n'.join(attendance_report)
+    # Generate attendance report
+    attendance_lines = []
+    for speaker, data in sorted(attendance_data.items()):
+        duration = int((data['last_seen'] - data['first_seen']).total_seconds() / 60)
+        attendance_lines.append(f"{speaker} | {duration} minutes")
 
     html = f"""
         <html>
             <body>
                 <h2>{meeting_name}</h2>
-                <h3>Attendance Report</h3>
                 <pre style="font-family: monospace;">
-{participants_text}
+{chr(10).join(attendance_lines)}
                 </pre>
             </body>
         </html>
