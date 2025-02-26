@@ -1,90 +1,87 @@
-
-import os
 import asyncio
+import details
 from amazon_transcribe.client import TranscribeStreamingClient
 from amazon_transcribe.handlers import TranscriptResultStreamHandler
 from amazon_transcribe.model import TranscriptEvent
-import sounddevice as sd
 from datetime import datetime, timedelta
 import bisect
 
-import boto3
-import json
-import re
-from email.mime.application import MIMEApplication
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-import requests
-
-meeting_platform = os.environ['MEETING_PLATFORM']
-meeting_id = os.environ['MEETING_ID']
-meeting_password = os.environ['MEETING_PASSWORD']
-meeting_name = os.environ['MEETING_NAME']
-
-email_sender = os.environ['EMAIL_SENDER']
-email_receiver = os.environ['EMAIL_RECEIVER']
-
-scribe_name = "Attendance Tracker"
-scribe_identity = f"{scribe_name} ({email_receiver})"
-
-waiting_timeout = 300000 # 5 minutes
-meeting_timeout = 21600000 # 6 hours
-
-speakers = []
 speaker_timestamps = []
 
-async def speaker_change(speaker):
-    speaker_timestamps.append(datetime.now())
-    speakers.append(speaker)
-    print('New Speaker:', speaker)
 
-def encapsulate():
-    email_source = f"{scribe_name} <{'+attendance@'.join(email_sender.split('@'))}>"
-    email_destinations = [email_receiver]
-    
-    msg = MIMEMultipart('mixed')
-    msg['From'] = email_source
-    msg['To'] = ', '.join(email_destinations)
-    msg['Subject'] = f"{meeting_name} - Attendance Report"
+class ScribeHandler(TranscriptResultStreamHandler):
+    async def handle_transcript_event(self, transcript_event: TranscriptEvent):
+        for result in transcript_event.transcript.results:
+            if not result.is_partial:
+                for item in result.alternatives[0].items:
+                    word = item.content
+                    word_type = item.item_type
+                    if word_type == "pronunciation":
+                        timestamp = start_time + timedelta(seconds=item.start_time)
+                        speaker = details.speakers[
+                            bisect.bisect_right(speaker_timestamps, timestamp) - 1
+                        ]
+                        # print(f"[{timestamp.strftime('%H:%M:%S.%f')}] {speaker}: {word}")
+                        if (
+                            not details.captions
+                            or speaker not in details.captions[-1].split(": ")[0]
+                        ):
+                            details.captions.append(
+                                f"[{timestamp.strftime('%H:%M')}] {speaker}: {word}"
+                            )
+                        else:
+                            details.captions[-1] += f" {word}"
+                    elif word_type == "punctuation":
+                        details.captions[-1] += word
 
-    # Calculate attendance durations for each unique participant
-    attendance_data = {}
-    for speaker, timestamp in zip(speakers, speaker_timestamps):
-        if speaker not in attendance_data:
-            attendance_data[speaker] = {
-                'first_seen': timestamp,
-                'last_seen': timestamp
-            }
-        else:
-            attendance_data[speaker]['last_seen'] = timestamp
 
-    # Generate attendance report
-    attendance_lines = []
-    for speaker, data in sorted(attendance_data.items()):
-        duration = int((data['last_seen'] - data['first_seen']).total_seconds() / 60)
-        attendance_lines.append(f"{speaker} | {duration} minutes")
+async def write_audio(process, stream):
+    while details.start:
+        audio_data = await process.stdout.read(1024)
+        await stream.input_stream.send_audio_event(audio_chunk=audio_data)
 
-    html = f"""
-        <html>
-            <body>
-                <h2>{meeting_name}</h2>
-                <pre style="font-family: monospace;">
-{chr(10).join(attendance_lines)}
-                </pre>
-            </body>
-        </html>
-    """
+    await stream.input_stream.end_stream()
+    process.terminate()
 
-    body = MIMEMultipart('alternative')
-    charset = "utf-8"
-    body.attach(MIMEText(html.encode(charset), 'html', charset))
-    msg.attach(body)
 
-    boto3.client("ses").send_raw_email(
-        Source=email_source,
-        Destinations=email_destinations,
-        RawMessage={
-            'Data':msg.as_string(),
-        }
+async def transcribe():
+    global start_time
+
+    process = await asyncio.create_subprocess_exec(
+        "ffmpeg",
+        "-f",
+        "pulse",
+        "-i",
+        "default",
+        "-f",
+        "s16le",
+        "-ar",
+        "16000",
+        "-ac",
+        "1",
+        "-acodec",
+        "pcm_s16le",
+        "-",
+        stdout=asyncio.subprocess.PIPE,
     )
-    print("Email sent!")
+    stream = await TranscribeStreamingClient(
+        region="us-east-1"
+    ).start_stream_transcription(
+        language_code="en-US",
+        media_sample_rate_hz=16000,
+        media_encoding="pcm",
+    )
+
+    start_time = datetime.now()
+
+    await asyncio.gather(
+        write_audio(process, stream),
+        ScribeHandler(stream.output_stream).handle_events(),
+    )
+
+
+async def speaker_change(speaker):
+    timestamp = datetime.now()
+    speaker_timestamps.append(timestamp)
+    details.speakers.append(speaker)
+    # print(f"[{timestamp.strftime('%H:%M:%S.%f')}] {speaker}")

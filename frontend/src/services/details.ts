@@ -21,7 +21,6 @@ export interface MeetingPlatform {
 
 export const meetingPlatforms: MeetingPlatform[] = [
     { label: "Amazon Chime", disabled: false, value: "Chime" },
-    { label: "Zoom", disabled: false, value: "Zoom" },
-    { label: "Microsoft Teams", disabled: true, value: "Teams" },
-    { label: "Google Meet", disabled: true, value: "Meet" }
+    { label: "Webex", disabled: false, value: "Webex" },
+    { label: "Zoom", disabled: false, value: "Zoom" }
 ]
