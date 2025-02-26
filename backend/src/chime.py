@@ -123,8 +123,6 @@ async def meeting(page):
             await send_messages(details.pause_messages)
         elif not details.start and text == details.start_command:
             details.start = True
-            print(details.start_messages[0])
-            await send_messages(details.start_messages)
             asyncio.create_task(scribe.transcribe())
         elif details.start and not (
             sender == "Amazon Chime" or details.scribe_name in sender

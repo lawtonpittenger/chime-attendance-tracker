@@ -14,7 +14,7 @@ scribe_identity = f"{scribe_name} ({email_receiver})"
 waiting_timeout = 300000  # 5 minutes
 meeting_timeout = 21600000  # 6 hours
 
-start = False
+start = True
 
 start_command = "START"
 pause_command = "PAUSE"
@@ -22,24 +22,16 @@ end_command = "END"
 
 intro_messages = [
     (
-        "Hello! I am an AI-assisted scribe. To learn more about me,"
-        " visit https://github.com/aws-samples/automated-meeting-scribe-and-summarizer."
-    ),
-    (
-        f'If all participants consent to my use, send "{start_command}" in the chat'
-        " to start saving new speakers, messages, and machine-generated captions."
-    ),
-    (
-        f'If you do not consent to my use, send "{end_command}" in the chat'
-        " to remove me from this meeting."
-    ),
+        "Hello! I am a automated meeting attendance tracking bot."
+        "I will be tracking attendance and saving chat messages during this meeting."
+    )
 ]
 start_messages = [
-    "Saving new speakers, messages, and machine-generated captions.",
+    "Saving attendance and chat messages",
     f'Send "{pause_command}" in the chat to stop saving meeting details.',
 ]
 pause_messages = [
-    "Not saving speakers, messages, or machine-generated captions.",
+    "Not saving attendance and chat messages.",
     f'Send "{start_command}" in the chat to start saving meeting details.',
 ]
 
