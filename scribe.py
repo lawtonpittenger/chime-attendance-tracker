@@ -312,90 +312,87 @@ def deliver(message):
     msg['From'] = email_source
     msg['To'] = ', '.join(email_destinations)
 
-    if not start:
-        msg['Subject'] = os.environ['MEETING_NAME']
-        body_html = body_text = message + " No meeting details were saved."
+
+    attendance = ""
+    chat = '\n'.join(messages)
+    transcript = '\n\n'.join(captions[1:])
+    time_now = datetime.now()
+
+    for index, attendee in enumerate(sorted(attendees, key=lambda k: k['Name'])):
+        attendee_name = attendee["Name"]
+        if anonymize:
+            attendee_label = f"Attendee {index + 1}"
+            attendance += attendee_label
+            chat = chat.replace(attendee_name, attendee_label)
+            transcript = transcript.replace(attendee_name, attendee_label)    
+        else: 
+            attendance += attendee_name
+            if attendee["Email"]:
+                attendance += f" ({attendee['Email']})"
+
+        if attendee["Joined"]:
+            if not attendee["Left"]:
+                attendee["Left"] = time_now
+            difference = attendee["Left"] - attendee["Joined"]
+            attendance += f" | {round(difference.total_seconds()/60)} minutes\n"
+        else: 
+            attendance += f" | Invited\n"
+
+    if not anonymize:
+        pii_exceptions = ['EMAIL', 'ADDRESS', 'NAME', 'PHONE', 'DATE_TIME', 'URL', 'AGE', 'USERNAME']
     else:
-        attendance = ""
-        chat = '\n'.join(messages)
-        transcript = '\n\n'.join(captions[1:])
-        time_now = datetime.now()
+        pii_exceptions = ['DATE_TIME', 'URL', 'AGE']
 
-        for index, attendee in enumerate(sorted(attendees, key=lambda k: k['Name'])):
-            attendee_name = attendee["Name"]
-            if anonymize:
-                attendee_label = f"Attendee {index + 1}"
-                attendance += attendee_label
-                chat = chat.replace(attendee_name, attendee_label)
-                transcript = transcript.replace(attendee_name, attendee_label)    
-            else: 
-                attendance += attendee_name
-                if attendee["Email"]:
-                    attendance += f" ({attendee['Email']})"
+    chat = redact_pii(chat, pii_exceptions)
+    transcript = redact_pii(transcript, pii_exceptions)
 
-            if attendee["Joined"]:
-                if not attendee["Left"]:
-                    attendee["Left"] = time_now
-                difference = attendee["Left"] - attendee["Joined"]
-                attendance += f" | {round(difference.total_seconds()/60)} minutes\n"
-            else: 
-                attendance += f" | Invited\n"
-
-        if not anonymize:
-            pii_exceptions = ['EMAIL', 'ADDRESS', 'NAME', 'PHONE', 'DATE_TIME', 'URL', 'AGE', 'USERNAME']
-        else:
-            pii_exceptions = ['DATE_TIME', 'URL', 'AGE']
-
-        chat = redact_pii(chat, pii_exceptions)
-        transcript = redact_pii(transcript, pii_exceptions)
-
-        prompt = (
-            "Please create a title, summary, and list of action items from the following transcript:"
-            f"\n<transcript>{transcript}</transcript>"
-            "\nPlease output the title in <title></title> tags, the summary in <summary></summary> tags,"
-            " and the action items in <action items></action items> tags."
+    prompt = (
+        "Please create a title, summary, and list of action items from the following transcript:"
+        f"\n<transcript>{transcript}</transcript>"
+        "\nPlease output the title in <title></title> tags, the summary in <summary></summary> tags,"
+        " and the action items in <action items></action items> tags."
+    )
+    body = json.dumps({
+        "max_tokens": 4096,
+        "messages": [{"role": "user", "content": prompt}],
+        "anthropic_version": "bedrock-2023-05-31"
+    })
+    try: 
+        response = boto3.client("bedrock-runtime").invoke_model(
+            body=body, modelId="anthropic.claude-3-sonnet-20240229-v1:0"
         )
-        body = json.dumps({
-            "max_tokens": 4096,
-            "messages": [{"role": "user", "content": prompt}],
-            "anthropic_version": "bedrock-2023-05-31"
-        })
-        try: 
-            response = boto3.client("bedrock-runtime").invoke_model(
-                body=body, modelId="anthropic.claude-3-sonnet-20240229-v1:0"
-            )
-            bedrock_completion = json.loads(response.get("body").read())["content"][0]["text"]
-        except Exception as e:
-            print(f"Error while invoking model: {e}")
-            bedrock_completion = ""
+        bedrock_completion = json.loads(response.get("body").read())["content"][0]["text"]
+    except Exception as e:
+        print(f"Error while invoking model: {e}")
+        bedrock_completion = ""
 
-        title = re.findall(r'<title>(.*?)</title>|$', bedrock_completion, re.DOTALL)[0].strip()
-        summary = re.findall(r'<summary>(.*?)</summary>|$', bedrock_completion, re.DOTALL)[0].strip()
-        action_items = re.findall(
-            r'<action items>(.*?)</action items>|$', bedrock_completion, re.DOTALL
-        )[0].strip()   
+    title = re.findall(r'<title>(.*?)</title>|$', bedrock_completion, re.DOTALL)[0].strip()
+    summary = re.findall(r'<summary>(.*?)</summary>|$', bedrock_completion, re.DOTALL)[0].strip()
+    action_items = re.findall(
+        r'<action items>(.*?)</action items>|$', bedrock_completion, re.DOTALL
+    )[0].strip()   
 
-        msg['Subject'] = f"{os.environ['MEETING_NAME']} | {title}"
+    msg['Subject'] = f"{os.environ['MEETING_NAME']} | {title}"
 
-        body_text = message + "\n\nAttendees:\n" + attendance
-        body_html = f"""
-        <html>
-            <body>
-                <p>{message}</p>
-                <h4>Attendees</h4>
-                <p>{attendance.replace('\n', '<br>')}</p>
-            </body>
-        </html>
-        """
+    body_text = message + "\n\nAttendees:\n" + attendance
+    body_html = f"""
+    <html>
+        <body>
+            <p>{message}</p>
+            <h4>Attendees</h4>
+            <p>{attendance.replace('\n', '<br>')}</p>
+        </body>
+    </html>
+    """
 
-        attachment = MIMEApplication(chat)
-        attachment.add_header('Content-Disposition','attachment',filename="chat.txt")
+    attachment = MIMEApplication(chat)
+    attachment.add_header('Content-Disposition','attachment',filename="chat.txt")
+    msg.attach(attachment)
+
+    for file_name, link in attachments.items():
+        attachment = MIMEApplication(requests.get(link).content)
+        attachment.add_header('Content-Disposition','attachment',filename=file_name)
         msg.attach(attachment)
-
-        for file_name, link in attachments.items():
-            attachment = MIMEApplication(requests.get(link).content)
-            attachment.add_header('Content-Disposition','attachment',filename=file_name)
-            msg.attach(attachment)
 
     charset = "utf-8"
 
