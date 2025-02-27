@@ -45,15 +45,6 @@ messages = []
 attachments = {}
 captions = []
 
-def send_message(message):
-
-    message_element = wait.until(EC.element_to_be_clickable((
-        By.CSS_SELECTOR,
-        'textarea[placeholder="Message all attendees"]',
-    )))
-    message_element.send_keys(message)
-    message_element.submit()
-
 def initialize():
 
     print("Getting meeting link.")
@@ -99,14 +90,6 @@ def initialize():
                 ):
                     deliver(dialogue)
 
-    print("Sending introduction messages.")
-    send_message(
-        'Hello! I am an AI-assisted scribe for Amazon Chime. To learn more about me,'
-        ' visit https://github.com/aws-samples/automated-meeting-scribe-and-summarizer.'
-        f'\nIf all attendees consent, send "{start_command}" in the chat'
-        ' to save attendance, new messages and machine-generated captions.'
-        f'\nOtherwise, send "{end_command}" in the chat to remove me from this meeting.'
-    )
 
     print("Opening attendees panel.")
     wait.until(EC.element_to_be_clickable((
@@ -237,20 +220,6 @@ def scrape_messages():
             initialize_captions()
             start = True
             start_message = 'Saving attendance, new messages and machine-generated captions.'
-            print(start_message)
-            send_message(start_message)
-            send_message(
-                'Sensitive personally identifiable information is redacted by default.'
-                f' For further anonymity, send "{anonymize_command}" in the chat'
-                f' to additionally redact emails, addresses, phone numbers, and names.'
-            )
-        elif not anonymize and text == anonymize_command:
-            anonymize = True
-            anonymize_message = "Redacting emails, addresses, phone numbers, and names."
-            print(anonymize_message)
-            send_message(anonymize_message)
-        elif text == end_command:
-            deliver("Your scribe has been removed from the meeting.")
 
         if (
             not start or 
@@ -408,25 +377,16 @@ def deliver(message):
 
         msg['Subject'] = f"{os.environ['MEETING_NAME']} | {title}"
 
-        body_text = message + "\n\nAttendees:\n" + attendance + "\nSummary:\n" + summary \
-            + "\n\nAction Items:\n" + action_items
+        body_text = message + "\n\nAttendees:\n" + attendance
         body_html = f"""
         <html>
             <body>
                 <p>{message}</p>
                 <h4>Attendees</h4>
                 <p>{attendance.replace('\n', '<br>')}</p>
-                <h4>Summary</h4>
-                <p>{summary.replace('\n', '<br>')}</p>
-                <h4>Action Items</h4>
-                <p>{action_items.replace('\n', '<br>')}</p>
             </body>
         </html>
         """
-
-        attachment = MIMEApplication(transcript)
-        attachment.add_header('Content-Disposition','attachment',filename="transcript.txt")
-        msg.attach(attachment)
 
         attachment = MIMEApplication(chat)
         attachment.add_header('Content-Disposition','attachment',filename="chat.txt")
@@ -469,8 +429,6 @@ while True:
         if iteration_count % 10  == 0:
             scrape_attendees()
         scrape_messages()
-        if start:
-            scrape_captions()
     except StaleElementReferenceException:
         pass
     except Exception as e:
