@@ -29,7 +29,7 @@ options.add_argument("no-sandbox")
 driver = Chrome(options=options)
 wait = WebDriverWait(driver, 10)
 
-scribe_name = "Scribe"
+scribe_name = "Attendance Tracker Bot"
 email_address = os.environ['EMAIL']
 scribe_identity = f"{scribe_name} ({email_address})"
 
