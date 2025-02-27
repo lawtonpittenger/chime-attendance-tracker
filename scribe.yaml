@@ -1224,7 +1224,7 @@ Resources:
       Type: "AWS::CloudFront::OriginAccessControl"
       Properties:
           OriginAccessControlConfig: 
-              Name: !Join [ '', ['frontendwebaccess', !Select [0, !Split [-, !Select [2, !Split [/, !Ref AWS::StackId ]]]]]]
+              Name: 'frontendwebaccessOAC'
               OriginAccessControlOriginType: "s3"
               SigningBehavior: "always"
               SigningProtocol: "sigv4"
