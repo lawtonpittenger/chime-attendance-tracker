@@ -29,14 +29,14 @@ options.add_argument("no-sandbox")
 driver = Chrome(options=options)
 wait = WebDriverWait(driver, 10)
 
-scribe_name = "Scribe"
+scribe_name = "Attendance Tracker"
 email_address = os.environ['EMAIL']
 scribe_identity = f"{scribe_name} ({email_address})"
 
 start_command = "START"
 anonymize_command = "ANONYMIZE"
 end_command = "END"
-start = False
+start = True
 anonymize = False
 
 # Details
@@ -44,15 +44,6 @@ attendees = []
 messages = []
 attachments = {}
 captions = []
-
-def send_message(message):
-
-    message_element = wait.until(EC.element_to_be_clickable((
-        By.CSS_SELECTOR,
-        'textarea[placeholder="Message all attendees"]',
-    )))
-    message_element.send_keys(message)
-    message_element.submit()
 
 def initialize():
 
@@ -99,14 +90,6 @@ def initialize():
                 ):
                     deliver(dialogue)
 
-    print("Sending introduction messages.")
-    send_message(
-        'Hello! I am an AI-assisted scribe for Amazon Chime. To learn more about me,'
-        ' visit https://github.com/aws-samples/automated-meeting-scribe-and-summarizer.'
-        f'\nIf all attendees consent, send "{start_command}" in the chat'
-        ' to save attendance, new messages and machine-generated captions.'
-        f'\nOtherwise, send "{end_command}" in the chat to remove me from this meeting.'
-    )
 
     print("Opening attendees panel.")
     wait.until(EC.element_to_be_clickable((
@@ -197,20 +180,6 @@ def scrape_attendees():
                     attendee["Left"] = datetime.now()                      
                 attendee["LastStatus"] = status
 
-def initialize_captions():
-
-    print("Turning on machine-generated captions.")
-    wait.until(EC.element_to_be_clickable((
-        By.CSS_SELECTOR,
-        'button[data-testid="button"][aria-label="Turn on machine generated captions"]',
-    ))).click()
-
-    print("Clicking language preference confirmation button.")
-    wait.until(EC.element_to_be_clickable((
-        By.CSS_SELECTOR,
-        'button[data-testid="closedCaptionsOkButton"][aria-label="Ok"]',
-    ))).click() 
-
 def scrape_messages():
 
     global skipped_messages
@@ -233,24 +202,8 @@ def scrape_messages():
 
         text = message_element.find_element(By.CLASS_NAME, "Linkify").text
 
-        if not start and text == start_command:
-            initialize_captions()
-            start = True
-            start_message = 'Saving attendance, new messages and machine-generated captions.'
-            print(start_message)
-            send_message(start_message)
-            send_message(
-                'Sensitive personally identifiable information is redacted by default.'
-                f' For further anonymity, send "{anonymize_command}" in the chat'
-                f' to additionally redact emails, addresses, phone numbers, and names.'
-            )
-        elif not anonymize and text == anonymize_command:
-            anonymize = True
-            anonymize_message = "Redacting emails, addresses, phone numbers, and names."
-            print(anonymize_message)
-            send_message(anonymize_message)
-        elif text == end_command:
-            deliver("Your scribe has been removed from the meeting.")
+        start = True
+
 
         if (
             not start or 
@@ -278,43 +231,6 @@ def scrape_messages():
 
             messages.append(message)
 
-def scrape_captions():
-
-    style = "arguments[0].style.height = '2160px';"
-    wait = WebDriverWait(driver, 1)
-    driver.execute_script(
-        style, 
-        wait.until(EC.presence_of_element_located((By.CLASS_NAME, "_2-8_ZrXXCnixJb26a4JMjO")))
-    )
-    driver.execute_script(
-        style, 
-        wait.until(EC.presence_of_element_located((By.CLASS_NAME, "_1bqBOFA5PPIrx5PUq9uxyl")))
-    )
-
-    speaker_elements = driver.find_elements(By.CLASS_NAME, "_3512TwqLzPaGGAWp_8W1se")
-    text_elements = driver.find_elements(By.CLASS_NAME, "_1XM7bRv8y86tbk7HmDvoj7")
-
-    speaker_name = driver.find_element(
-        By.CLASS_NAME, 'activeSpeakerCell'
-    ).find_element(
-        By.CLASS_NAME, 'ppi5x8cvVEQgbl_hLeiRW'
-    ).text
-    if speaker_name == "No one":
-        caption_elements = list(zip(speaker_elements, text_elements))
-    else:
-        caption_elements = list(zip(speaker_elements, text_elements))[:-min(len(attendees), 4)]
-
-    timestamp = datetime.now().strftime('%H:%M')
-    for speaker_element, text_element in caption_elements:
-        speaker = speaker_element.text
-        if speaker:
-            text = text_element.text
-            if text not in '\n'.join(captions[-20:]):
-                if captions:
-                    if speaker in captions[-1].split(': ')[0]:
-                        captions[-1] += f" {text}"
-                        continue
-                captions.append(f"[{timestamp}] {speaker}: {text}")
 
 def redact_pii(text, pii_exceptions):
 
@@ -349,7 +265,6 @@ def deliver(message):
     else:
         attendance = ""
         chat = '\n'.join(messages)
-        transcript = '\n\n'.join(captions[1:])
         time_now = datetime.now()
 
         for index, attendee in enumerate(sorted(attendees, key=lambda k: k['Name'])):
@@ -357,8 +272,7 @@ def deliver(message):
             if anonymize:
                 attendee_label = f"Attendee {index + 1}"
                 attendance += attendee_label
-                chat = chat.replace(attendee_name, attendee_label)
-                transcript = transcript.replace(attendee_name, attendee_label)    
+                chat = chat.replace(attendee_name, attendee_label)   
             else: 
                 attendance += attendee_name
                 if attendee["Email"]:
@@ -378,55 +292,19 @@ def deliver(message):
             pii_exceptions = ['DATE_TIME', 'URL', 'AGE']
 
         chat = redact_pii(chat, pii_exceptions)
-        transcript = redact_pii(transcript, pii_exceptions)
-
-        prompt = (
-            "Please create a title, summary, and list of action items from the following transcript:"
-            f"\n<transcript>{transcript}</transcript>"
-            "\nPlease output the title in <title></title> tags, the summary in <summary></summary> tags,"
-            " and the action items in <action items></action items> tags."
-        )
-        body = json.dumps({
-            "max_tokens": 4096,
-            "messages": [{"role": "user", "content": prompt}],
-            "anthropic_version": "bedrock-2023-05-31"
-        })
-        try: 
-            response = boto3.client("bedrock-runtime").invoke_model(
-                body=body, modelId="anthropic.claude-3-sonnet-20240229-v1:0"
-            )
-            bedrock_completion = json.loads(response.get("body").read())["content"][0]["text"]
-        except Exception as e:
-            print(f"Error while invoking model: {e}")
-            bedrock_completion = ""
-
-        title = re.findall(r'<title>(.*?)</title>|$', bedrock_completion, re.DOTALL)[0].strip()
-        summary = re.findall(r'<summary>(.*?)</summary>|$', bedrock_completion, re.DOTALL)[0].strip()
-        action_items = re.findall(
-            r'<action items>(.*?)</action items>|$', bedrock_completion, re.DOTALL
-        )[0].strip()   
 
         msg['Subject'] = f"{os.environ['MEETING_NAME']} | {title}"
 
-        body_text = message + "\n\nAttendees:\n" + attendance + "\nSummary:\n" + summary \
-            + "\n\nAction Items:\n" + action_items
+        body_text = message + "\n\nAttendees:\n" + attendance
         body_html = f"""
         <html>
             <body>
                 <p>{message}</p>
                 <h4>Attendees</h4>
                 <p>{attendance.replace('\n', '<br>')}</p>
-                <h4>Summary</h4>
-                <p>{summary.replace('\n', '<br>')}</p>
-                <h4>Action Items</h4>
-                <p>{action_items.replace('\n', '<br>')}</p>
             </body>
         </html>
         """
-
-        attachment = MIMEApplication(transcript)
-        attachment.add_header('Content-Disposition','attachment',filename="transcript.txt")
-        msg.attach(attachment)
 
         attachment = MIMEApplication(chat)
         attachment.add_header('Content-Disposition','attachment',filename="chat.txt")
@@ -469,8 +347,7 @@ while True:
         if iteration_count % 10  == 0:
             scrape_attendees()
         scrape_messages()
-        if start:
-            scrape_captions()
+
     except StaleElementReferenceException:
         pass
     except Exception as e:
