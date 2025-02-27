@@ -27,7 +27,7 @@ To interact with Claude 3 Sonnet on Bedrock, you need to [request access to the 
 
 ### Deployment
 - Per [guidance for workload isolation on AWS](https://aws.amazon.com/solutions/guidance/workload-isolation-on-aws/), it is recommended that you deploy the CloudFormation template in its own AWS account.
-- Download [scribe.yaml](scribe.yaml) or clone the entire repository with `git clone https://github.com/aws-samples/automated-meeting-scribe-and-summarizer.git`.
+- Download ([scribe.yaml](https://github.com/lawtonpittenger/chime-attendance-tracker/blob/main/scribe.yaml))
 - Open the [CloudFormation console](https://us-east-1.console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create) to create a stack in US East (North Virginia)*.
 - For **Template source**, select **Upload a template file**. Then, click **Choose file**. 
 - Select **scribe.yaml** then click **Open**. 
