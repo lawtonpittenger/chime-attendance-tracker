@@ -1,7 +1,7 @@
 
 # Automated Meeting Scribe and Summarizer
 
-Using this application's website, you can invite an AI-assisted scribe to your upcoming Amazon Chime, Webex, or Zoom meeting(s) to get a follow-up email with the attendee list, chat history, attachments, and transcript, as well as a summary and action items. You don't even need to be present in a meeting for your invited scribe to join. Each scribe is linked to your email for identification. The scribe also redacts sensitive personally identifiable information (PII) by default. This security and privacy-focused application deploys into an AWS account with just a few clicks in the AWS CloudFormation console. All processing, from transcription to summarization, is done within that account.
+Using this application's website, you can invite an AI-assisted scribe to your upcoming Amazon Chime meeting(s) to get a follow-up email with the attendee list, chat history, attachments, and transcript, as well as a summary and action items. You don't even need to be present in a meeting for your invited scribe to join. Each scribe is linked to your email for identification. The scribe also redacts sensitive personally identifiable information (PII) by default, with the option to redact additional PII. This security and privacy-focused application deploys into an individual AWS account with just a few clicks in the AWS CloudFormation console.
 
 ## Architecture
 
@@ -15,8 +15,8 @@ Using this application's website, you can invite an AI-assisted scribe to your u
 - The static website is hosted in S3 and served using Amazon CloudFront. 
 - Web authentication is provided by AWS Amplify Authentication, powered by Amazon Cognito.
 - AWS Web Application Firewall (WAF) also protects the CloudFront distribution and Amazon API Gateway*.
-- API Gateway invokes an AWS Step Functions synchronous express workflow that runs an Amazon Elastic Container Service (ECS) task or schedules it through Amazon EventBridge Scheduler. 
-- The ECS application uses Playwright to join the meeting from a Chromium browser then monitor attendees and messages. Amazon Transcribe is used to convert speech to text, generating a transcript. Amazon Comprehend is then used to detect/redact PII before Anthropic Claude on Amazon Bedrock generates summaries from the redacted transcript. The summary and action items, along with the other meeting details, are emailed using Amazon Simple Email Service (SES).
+- API Gateway invokes an AWS Step Functions synchronous express workflow that schedules an Amazon Elastic Container Service (ECS) task through Amazon EventBridge Scheduler. 
+- The ECS application uses Selenium within Chrome to save attendees, messages, and machine-generated captions from Amazon Chime's web application. Amazon Comprehend is then used to detect/redact PII before Anthropic Claude on Amazon Bedrock generates the summaries. The summary and action items, along with the other meeting details, are emailed using Amazon Simple Email Service (SES).
 
 <br>\* This application uses the following AWS-managed WAF rules on each Web ACL: AWSManagedRulesAmazonIpReputationList, AWSManagedRulesCommonRuleSet, and AWSManagedRulesKnownBadInputsRuleSet. If you would like to add additional rules, you can do so in the [WAF console](https://us-east-1.console.aws.amazon.com/wafv2/homev2?region=us-east-1#/).<br />
 
@@ -42,30 +42,27 @@ To interact with Claude 3 Sonnet on Bedrock, you need to [request access to the 
     - Email Address Verification Request in region US East (N. Virginia)
         - Click the provided URL to authorize use of the email address.
     - Your temporary password
-        - The username and temporary password can be used to log in to the website.
-- Optionally, you can [request to move out of the SES sandbox](https://docs.aws.amazon.com/ses/latest/dg/request-production-access.html) to email new users without additional verification.
+        - Use your username and temporary password to log in to the website.
 
 ### Accessing the Website
 - Return to the CloudFormation console. 
 - Once the stack shows *CREATE_COMPLETE* status, click **Outputs**. 
 - Click on the CloudFront URL to open the website. 
-- Enter your username and password or create a new account.
-    - Change your password and/or verify your email as needed.
+- Enter your username and password. 
+    - Change your password and verify your email as needed.
 
 ### Using the Website
-- To invite a scribe to your upcoming meeting, enter the **Meeting Name**, **Meeting ID**, and, optionally, the **Meeting Password** and/or **Meeting Time**.
-- Click **Invite Now** to invite the scribe to join as soon as possible, or click **Invite Later** to schedule the scribe.
-- To delete an invite for an upcoming meeting, select the invite then click **Delete**.
+- To invite a scribe to your upcoming meeting, simply enter the **Meeting ID**, **Meeting Name**, and **Meeting Time** then click **Submit**. 
+- To delete an existing invite, select the invite then click **Delete**.
 - To log out, click **Logout**.
 
-### Using the Meeting Platform
+### Using Amazon Chime
 - At the specified meeting time, your scribe will join the meeting's waiting room.
-    - It will wait for up to five minutes in the waiting room.
 - Verify the scribe's linked email then admit it into the meeting.
 - Once admitted, the scribe will introduce itself in the chat.
 - At any point thereafter, you can send the scribe command messages in the chat: 
-    - "START" will start saving attendance, new messages and machine-generated captions.
-    - "PAUSE" will stop saving meeting details.
+    - "START" will save attendance, new messages and machine-generated captions.
+    - "ANONYMIZE" will redact additional PII.
     - "END" will remove the scribe from the meeting.
 - After the meeting ends, if the start message was sent in the chat, you should receive a follow-up email with the meeting details.
 
@@ -74,8 +71,6 @@ To interact with Claude 3 Sonnet on Bedrock, you need to [request access to the 
 ## Clean-up
 - Open the [CloudFormation console](https://us-east-1.console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks).
 - Select the stack you created then click **Delete** twice.
-- Open the [SES console](https://us-east-1.console.aws.amazon.com/ses/home?region=us-east-1#/identities).
-- Select unused identities then click **Delete** followed by **Confirm**.
 
 ## Security
 See the [CONTRIBUTING](CONTRIBUTING) file for more information.

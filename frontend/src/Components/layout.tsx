@@ -1,5 +1,5 @@
 
-import scheduleService, { Schedule } from '../services/details'
+import scheduleService, { Schedule } from '../services/schedule'
 import { HttpService } from '../services/http'
 import { CanceledError } from '../services/client'
 import MeetingForm from './form'
@@ -18,14 +18,12 @@ import {
 } from '@cloudscape-design/components'
 
 export type Meeting = {
-  meetingPlatform: string,
   meetingID: string,
-  meetingPassword: string,
   meetingName: string,
   meetingTime: string
 }
 
-interface CustomMessage {
+interface CustomError {
   type: string,
   dismissible: boolean,
   dismissLabel: string,
@@ -36,7 +34,7 @@ interface CustomMessage {
 
 function Layout() {
   const [schedules, setSchedules] = useState<Schedule[]>([])
-  const [message, setMessage] = useState<CustomMessage[]>()
+  const [error, setError] = useState<CustomError[]>()
   var meetingApi: HttpService | null
 
   async function initializeMeetingApi() {
@@ -51,15 +49,15 @@ function Layout() {
     return meetingApi
   }
 
-  function setMessageProperties(message: any, type: "error" | "success") {
-    setMessage([{
-      type: type,
+  function setErrorProperties(err: any) {
+    setError([{
+      type: "error",
       dismissible: true,
-      dismissLabel: "Dismiss",
-      onDismiss: () => setMessage([]),
+      dismissLabel: "Error",
+      onDismiss: () => setError([]),
       content: (
         <>
-          {message}
+          {err.message}
         </>
       ),
       id: "message_1"
@@ -74,19 +72,21 @@ function Layout() {
 
         request.then((response) => {
           setSchedules(response.data)
-          setMessage([])
+          setError([])
         }).catch((err) => {
           if (!(err instanceof CanceledError)) {
-            setMessageProperties(err.message, "error")
+            setErrorProperties(err)
           }
         })
+
         return () => cancel()
 
       } catch (err) {
-        setMessageProperties((err as Error).message, "error")
+        setErrorProperties(err)
       }
     }
     initializeSession()
+
   }, [])
 
   const createInvite = async (meeting: Meeting) => {
@@ -98,14 +98,15 @@ function Layout() {
 
       request.then((response) => {
         setSchedules(response.data)
+        setError([])
       }).catch((err) => {
-        setMessageProperties((err as Error).message, "error")
-      }).finally(() => {
-        setMessageProperties(meeting.meetingName + " invite created!", "success")
+        setErrorProperties(err)
       })
 
+      setError([])
+
     }).catch(err => {
-      setMessageProperties((err as Error).message, "error")
+      setErrorProperties(err)
       setSchedules(schedulesCopy)
     })
   }
@@ -123,12 +124,11 @@ function Layout() {
         initializedMeetingApi.delete<{
           meetingName: string
         }>(meetingProperties).then(() => {
+          setError([])
           schedulesCopy = schedulesCopy.filter(schedule => schedule.Name !== selectedItem.Name)
           setSchedules([...schedulesCopy])
         }).catch(err => {
-          setMessageProperties((err as Error).message, "error")
-        }).finally(() => {
-          setMessageProperties("Selected invite(s) deleted!", "success")
+          setErrorProperties(err)
         })
       })
     }
@@ -140,9 +140,9 @@ function Layout() {
         navigationHide={true}
         toolsHide={true}
         notifications={
-          message?.length !== 0 && (
+          error?.length !== 0 && (
             <Flashbar
-              items={message ? message as any : []}
+              items={error ? error as any : []}
             />
           )
         }
@@ -151,7 +151,7 @@ function Layout() {
             <SpaceBetween direction="vertical" size="l">
 
               <Container header={
-                <Header variant="h2" description="Add an AI-assisted scribe to your upcoming meeting.">
+                <Header variant="h2" description="Add an AI-assisted scribe to your upcoming Amazon Chime meeting.">
                   Invite
                 </Header>}>
                 <MeetingForm createInvite={createInvite}></MeetingForm>

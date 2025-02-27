@@ -17,6 +17,7 @@ Amplify.configure({
 })
 
 function App(authenticatorProps: WithAuthenticatorProps) {
+
   return (
     <>
       <Navigation authenticatorProps={authenticatorProps} />
@@ -26,5 +27,5 @@ function App(authenticatorProps: WithAuthenticatorProps) {
 }
 
 export default withAuthenticator(App, {
-  hideSignUp: false
+  hideSignUp: true,
 })
