@@ -194,59 +194,6 @@ def initialize_captions():
         'button[data-testid="closedCaptionsOkButton"][aria-label="Ok"]',
     ))).click() 
 
-def scrape_messages():
-
-    global skipped_messages
-    global prev_sender
-    global start
-    global anonymize
-
-    message_elements = driver.find_elements(By.CLASS_NAME, "chatMessage")
-    chat_length = skipped_messages + len(messages)
-
-    timestamp = datetime.now().strftime('%H:%M')
-    for message_element in message_elements[chat_length:]:
-        try:
-            sender = message_element.find_element(
-                By.CSS_SELECTOR, "h3[data-testid='chat-bubble-sender-name']"
-            ).text
-        except NoSuchElementException:
-            sender = prev_sender
-        prev_sender = sender
-
-        text = message_element.find_element(By.CLASS_NAME, "Linkify").text
-
-        if not start and text == start_command:
-            initialize_captions()
-            start = True
-            start_message = 'Saving attendance, new messages and machine-generated captions.'
-
-        if (
-            not start or 
-            sender == "Amazon Chime" or
-            scribe_name in sender or
-            text in [start_command, anonymize_command]
-        ):
-            skipped_messages += 1
-        else: 
-            message = f"[{timestamp}] {sender}: "
-
-            try:
-                attachment_element = message_element.find_element(
-                    By.CLASS_NAME, "SLFfm3Dwo5MfFzks4uM11"
-                )
-            except NoSuchElementException:
-                message += text
-            else:
-                file_name = attachment_element.get_attribute("title")
-                attachments[file_name] = attachment_element.get_attribute("href")
-                if text:
-                    message += f"{text} | {file_name}"
-                else:
-                    message += file_name
-
-            messages.append(message)
-
 def scrape_captions():
 
     style = "arguments[0].style.height = '2160px';"
@@ -425,7 +372,6 @@ while True:
     try:
         if iteration_count % 10  == 0:
             scrape_attendees()
-        scrape_messages()
     except StaleElementReferenceException:
         pass
     except Exception as e:
